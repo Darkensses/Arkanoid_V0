@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8"/>
+		<title>Arkanoid JS</title>
+
+	</head>
+	<body>
+		<canvas id="myCanvas" width="320" height="480"></canvas>		
+
+		<script>
+			var canvas;
+			var canvasContext;			
+
+			// BrickType's Enum
+			var BrickType = {
+				DEFAULT : 1,
+				ICE : 1,
+				WOOD : 2,
+				STONE : 3,
+				IRON : 4,
+				STEEL : 5
+			};
+
+			// Color's Enum
+			var ColorType = {
+				MATERIAL_GRAY : '#9E9E9E',				
+				MATERIAL_RED : '#F44336',
+				MATERIAL_BLUE : '#2196F3',
+				MATERIAL_ORANGE : '#FF9800',
+				MATERIAL_PINK : '#F06292',
+				MATERIAL_GREEN : '#4CAF50',
+				MATERIAL_INDIGO : '#3F51B5',
+				MATERIAL_YELLOW : '#FFEB3B',
+				MATERIAL_GRAY_3 : '#EEEEEE'
+			};
+
+			// Paddle's Class
+			function Paddle(x,y,width,height,speed){
+				this.x = x;
+				this.y = y;
+				this.width = width;
+				this.height = height;
+				this.speed = speed;
+			}
+
+			// Ball's Class
+			function Ball(x,y,radius,speedX, speedY)
+			{
+				this.x = x;
+				this.y = y;
+				this.radius = radius;
+				this.speedX = speedX;
+				this.speedY = speedY;				
+			}
+			
+
+			// Brick's Class
+			function Brick(x,y,width,height,type){
+				this.x = x;
+				this.y = y;
+				this.width = width;
+				this.height = height;
+				this.type = type;
+			}
+
+			// Calculate distance on x's axis between two points
+			function DistanceX(x1,x2){
+				var distX = x2 - x1;
+				if(distX < 0 )
+				{
+					return -distX;
+				}
+				return distX;
+			}
+
+			// Calculate distance on Y's axis between two points
+			function DistanceY(y1,y2){
+				var distY = y2 - y1;
+				if(distY < 0 )
+				{
+					return -distY;
+				}
+				return distY;
+			}
+
+			// This Methods checks if there is any contact between ball and either rectangle
+			function IsTouchBR(cx1,cx2,cy1,cy2,lx,ly){
+				var dX = DistanceX(cx1,cx2);
+				var dY = DistanceY(cy1,cy2);
+				if(dX <= lx && dY <= ly)
+					return true;
+				else
+					return false;
+			}
+
+			// Main Class
+			function Arkanoid(canvas,canvasContext){
+				
+				const PADDLE_WIDTH = 60;
+				const PADDLE_HEIGHT = 10;
+				const PADDLE_SPEED = 8;
+				
+				const BALL_RADIUS = 5;
+				const BALL_SPEED_X = 6;
+				const BALL_SPEED_Y = 3;			
+
+				const BRICK_WIDTH = 60;
+				const BRICK_HEIGHT = 20;
+				const BRICK_COLUMNS = 5;
+				const BRICK_ROWS = 6;
+				var BRICK_SPACE_X = 1;
+				var BRICK_SPACE_Y = 1;
+			
+				var sideX;
+				var sideY;
+
+				var isStart = false;
+				var isPause = false;
+
+
+				this.paddle = new Paddle(canvas.width/2 - PADDLE_WIDTH/2, canvas.height - 20, PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_SPEED);
+				this.ball = new Ball(this.paddle.x+(this.paddle.width/2), this.paddle.y - BALL_RADIUS, BALL_RADIUS, BALL_SPEED_X, BALL_SPEED_Y);
+				sideX = Math.abs((this.paddle.x + this.paddle.width) - (this.paddle.x + (this.paddle.width/2))) + this.ball.radius;
+				sideY = Math.abs((this.paddle.y + this.paddle.height) - (this.paddle.y + (this.paddle.height/2))) + this.ball.radius;			
+
+				this.bricks = new Array();
+				for(var i = 0; i < BRICK_ROWS; i++){
+					this.bricks[i] = new Array();
+					BRICK_SPACE_X = 1;
+					for(var j = 0; j < BRICK_COLUMNS; j++){
+						this.bricks[i][j] = new Brick(j*BRICK_WIDTH + BRICK_SPACE_X, i*BRICK_HEIGHT + BRICK_SPACE_Y, BRICK_WIDTH, BRICK_HEIGHT, BrickType.DEFAULT);
+							BRICK_SPACE_X += 1;						
+					}
+					BRICK_SPACE_Y += 1;											
+				}
+
+
+				this.DrawBackground = function(drawColor,pX,pY,width,height){
+					canvasContext.fillStyle = drawColor;
+					canvasContext.fillRect(pX,pY,width,height); 
+				}
+
+				this.DrawPaddle = function(drawColor, pX, pY, width,height){
+					canvasContext.fillStyle = drawColor;
+					canvasContext.fillRect(pX,pY,width,height);					
+				}
+
+				this.DrawBall = function(){
+					canvasContext.fillStyle = ColorType.MATERIAL_YELLOW;
+					canvasContext.beginPath();
+					canvasContext.arc(this.ball.x, this.ball.y, this.ball.radius, 0, Math.PI*2, true);
+					canvasContext.fill();
+					canvasContext.closePath();
+				}		
+
+				this.DrawBricks = function(){
+					var colorBricks = [ColorType.MATERIAL_GRAY, ColorType.MATERIAL_RED, ColorType.MATERIAL_BLUE, ColorType.MATERIAL_ORANGE, ColorType.MATERIAL_PINK, ColorType.MATERIAL_GREEN];
+					for(var i = 0; i < this.bricks.length; i++){					
+						for(var j = 0; j < this.bricks[i].length; j++){
+							canvasContext.beginPath();
+							canvasContext.fillStyle = colorBricks[i];
+							canvasContext.fillRect(this.bricks[i][j].x, this.bricks[i][j].y, this.bricks[i][j].width, this.bricks[i][j].height);
+							canvasContext.closePath();
+						}
+					}
+				}	
+
+				this.MovePaddle = function(toRight){
+					//var mousePos = this.CalculateMousePosition(evt);
+					//if(paddle.x > canvas.width-(paddle.width/2) || paddle.x < paddle.width/2)
+					//	return;
+					if(isPause)
+						return;
+
+					if(toRight){
+						if(this.paddle.x  <= canvas.width-this.paddle.width-PADDLE_SPEED){
+							this.paddle.x += PADDLE_SPEED;								
+							if(!isStart){this.ball.x = this.paddle.x+(this.paddle.width/2);}
+						}
+
+					}
+					else if (this.paddle.x > 0+PADDLE_SPEED){
+						this.paddle.x -= PADDLE_SPEED;
+						if(!isStart){this.ball.x = this.paddle.x+(this.paddle.width/2);}
+
+					}
+					sideX = Math.abs((this.paddle.x + this.paddle.width) - (this.paddle.x + (this.paddle.width/2))) + this.ball.radius;
+					sideY = Math.abs((this.paddle.y + this.paddle.height) - (this.paddle.y + (this.paddle.height/2))) + this.ball.radius;
+				}
+
+				this.MoveBall = function(){
+
+					if(isPause)
+						return;
+
+					if(isStart){
+						this.ball.x += this.ball.speedX;
+						this.ball.y += this.ball.speedY;
+
+						for(var i = 0; i < this.bricks.length; i++){
+							for(var j = 0; j < this.bricks[i].length; j++){
+								
+								var sideBX = Math.abs((this.bricks[i][j].x + this.bricks[i][j].width) - (this.bricks[i][j].x + (this.bricks[i][j].width/2))) + this.ball.radius;
+								var sideBY = Math.abs((this.bricks[i][j].y + this.bricks[i][j].height) - (this.bricks[i][j].y + (this.bricks[i][j].height/2))) + this.ball.radius;			
+								
+								if(IsTouchBR(this.bricks[i][j].x+(this.bricks[i][j].width/2), this.ball.x, this.bricks[i][j].y+(this.bricks[i][j].height/2), this.ball.y, sideBX, sideBY)){
+									// Break Brick
+									this.bricks[i].splice(j,1);
+									this.ball.speedY = -this.ball.speedY;
+									break;
+								}
+							}
+						}
+
+						if(IsTouchBR(this.paddle.x+(this.paddle.width/2), this.ball.x, this.paddle.y + (this.paddle.height/2), this.ball.y, sideX, sideY)){
+							this.ball.speedY = -this.ball.speedY;
+						}
+						
+
+						if(this.ball.x + BALL_SPEED_X>canvas.width){
+							this.ball.speedX = -this.ball.speedX;
+						}
+						else if(this.ball.x - BALL_SPEED_X < 0){
+							this.ball.speedX = -this.ball.speedX;
+						}
+						if(this.ball.y + BALL_SPEED_Y >canvas.height){
+							isStart = false;
+							this.ball.x = this.paddle.x+(this.paddle.width/2);
+							this.ball.y =  this.paddle.y - BALL_RADIUS;							
+						}
+						else if(this.ball.y - BALL_SPEED_Y < 0){					
+							this.ball.speedY = -this.ball.speedY;
+						}
+					}
+				}
+
+				this.CalculateMousePosition = function(evt){
+					var rect = canvas.getBoundingClientRect();
+					var root = document.documentElement;
+					var mouseX = evt.clientX - rect.left - root.scrollLeft;
+					var mouseY = evt.clientY - rect.top - root.scrollTop;
+					return{
+						x:mouseX,
+						y:mouseY
+					};
+				}
+				
+
+				this.DrawGame = function(){
+
+					// Draw Background
+					this.DrawBackground(ColorType.MATERIAL_INDIGO,0,0,canvas.width,canvas.height);
+
+					// Draw Bricks
+					this.DrawBricks();
+
+					// Draw Paddle
+					this.DrawPaddle(ColorType.MATERIAL_GRAY_3,this.paddle.x,this.paddle.y,this.paddle.width,this.paddle.height);
+
+					// Draw Ball
+					this.DrawBall();
+
+					if(isPause){
+						canvasContext.fillStyle = 'white';
+						canvasContext.font = '20pt Calibri';
+						canvasContext.fillText("Pause",canvas.width/2 - 30,canvas.height/2);
+					}
+
+					if(!isStart){
+						canvasContext.fillStyle = 'white';
+						canvasContext.font = '20pt Calibri';
+						canvasContext.fillText("Press Space",canvas.width/2 - 60,canvas.height/2);
+						canvasContext.fillText("to Start",canvas.width/2 - 40,canvas.height/2 + 30);
+					}
+
+
+				}
+
+
+				this.IsStart = function(){
+					isStart = true;					
+				}
+
+				this.IsPause = function(){
+					if(!isStart)
+						return;
+					isPause = !isPause;
+					return isPause;
+				}
+
+				// MODIFY THE METHOD PLS
+				this.KeyDownHandler = function(evt){				
+					var keycode;
+					
+					keycode = evt.keyCode;
+					switch(keycode){
+
+						// ctrl: Pause
+						case 17:
+							arkanoidGame.IsPause();						
+							break;
+
+						// Space: Start	
+						case 32:
+							arkanoidGame.IsStart();						
+							break;
+
+						// KEY RIGHT: To Right
+						case 39:						
+							arkanoidGame.MovePaddle(true);							
+							break;
+
+						// KEY LEFT: To Left							
+						case 37:
+							arkanoidGame.MovePaddle(false);						
+							break;
+
+						default:
+							break;
+					}
+				}
+			}
+			// End of Main Class
+
+			var arkanoidGame;			
+
+			window.onload = function(){
+				canvas = document.getElementById('myCanvas');
+				canvasContext = canvas.getContext('2d');
+
+				var framesPerSecond = 30;
+				arkanoidGame = new Arkanoid(canvas,canvasContext);
+				console.log("Made by Darkensses");
+				
+				document.addEventListener('keydown',arkanoidGame.KeyDownHandler,false);				
+				
+				//ADD TIMER HERE				
+				setInterval(function(){
+					arkanoidGame.DrawGame();
+					arkanoidGame.MoveBall();					
+				},1000/framesPerSecond);
+
+				/*canvas.addEventListener('mousemove',function(evt){
+					arkanoidGame.MovePaddle(evt);
+				});*/
+
+			}			
+
+		</script>
+
+
+	</body>
+</html>
